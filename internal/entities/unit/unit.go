@@ -23,7 +23,6 @@ type Unit struct {
 // New creates a new Unit with required defaults.
 func New(userID mo.Option[uuid.UUID], name string) Unit {
 	now := time.Now()
-
 	return Unit{
 		ID:        uuid.New(),
 		Version:   1,
@@ -54,19 +53,13 @@ func (u Unit) Validate() error {
 
 // Touch increments the version and updates UpdatedAt.
 func (u *Unit) Touch() {
-	if u == nil {
-		return
-	}
-
 	u.Version++
 	u.UpdatedAt = time.Now()
 }
 
 // MarkDeleted marks the unit as deleted.
 func (u *Unit) MarkDeleted() {
-	if u == nil {
-		return
-	}
+	u.Version++
 
 	now := time.Now()
 	u.UpdatedAt = now
