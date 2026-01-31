@@ -24,7 +24,7 @@ var (
 type Repository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (unitEntity.Unit, error)
 	GetByIDs(ctx context.Context, ids []uuid.UUID) ([]unitEntity.Unit, error)
-	GetAll(ctx context.Context, substring mo.Option[string]) ([]unitEntity.Unit, error)
+	GetAll(ctx context.Context, userID uuid.UUID, substring mo.Option[string]) ([]unitEntity.Unit, error)
 	Create(ctx context.Context, unit unitEntity.Unit) error
 	Update(ctx context.Context, unit unitEntity.Unit) error
 }
@@ -54,12 +54,12 @@ func (u *UseCase) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]unitEntity.U
 }
 
 // GetAll returns all units, optionally filtered by name substring.
-func (u *UseCase) GetAll(ctx context.Context, substring mo.Option[string]) ([]unitEntity.Unit, error) {
+func (u *UseCase) GetAll(ctx context.Context, userID uuid.UUID, substring mo.Option[string]) ([]unitEntity.Unit, error) {
 	if substring.IsPresent() && substring.MustGet() == "" {
 		return nil, errors.Join(ErrBadParams, fmt.Errorf("substring must not be empty when set"))
 	}
 
-	units, err := u.repo.GetAll(ctx, substring)
+	units, err := u.repo.GetAll(ctx, userID, substring)
 	if err != nil {
 		return nil, fmt.Errorf("get all units: %w", err)
 	}
@@ -68,8 +68,8 @@ func (u *UseCase) GetAll(ctx context.Context, substring mo.Option[string]) ([]un
 }
 
 // Create creates a new unit.
-func (u *UseCase) Create(ctx context.Context, userID mo.Option[uuid.UUID], name string) (unitEntity.Unit, error) {
-	unit := unitEntity.New(userID, name)
+func (u *UseCase) Create(ctx context.Context, userID uuid.UUID, name string) (unitEntity.Unit, error) {
+	unit := unitEntity.New(mo.Some(userID), name)
 	if err := unit.Validate(); err != nil {
 		return unitEntity.Unit{}, errors.Join(ErrBadParams, fmt.Errorf("validate unit create: %w", err))
 	}
