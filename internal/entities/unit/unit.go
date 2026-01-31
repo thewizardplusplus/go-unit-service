@@ -1,6 +1,7 @@
-package unit
+package unitEntity
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/go-playground/validator/v10"
@@ -10,13 +11,13 @@ import (
 
 // Unit represents a business entity.
 type Unit struct {
-	ID        uuid.UUID            `validate:"required"`
-	Version   int                  `validate:"required,gt=0"`
-	CreatedAt time.Time            `validate:"required"`
-	UpdatedAt time.Time            `validate:"required,gtecsfield=CreatedAt"`
-	DeletedAt mo.Option[time.Time] `validate:"omitempty"`
-	UserID    mo.Option[uuid.UUID] `validate:"omitempty"`
-	Name      string               `validate:"required"`
+	ID        uuid.UUID `validate:"required"`
+	Version   int       `validate:"required,gt=0"`
+	CreatedAt time.Time `validate:"required"`
+	UpdatedAt time.Time `validate:"required,gtecsfield=CreatedAt"`
+	DeletedAt mo.Option[time.Time]
+	UserID    mo.Option[uuid.UUID]
+	Name      string `validate:"required"`
 }
 
 // New creates a new Unit with required defaults.
@@ -35,8 +36,20 @@ func New(userID mo.Option[uuid.UUID], name string) Unit {
 
 // Validate validates the Unit invariants.
 func (u Unit) Validate() error {
-	validate := validator.New()
-	return validate.Struct(u)
+	validate := validator.New(validator.WithRequiredStructEnabled())
+	if err := validate.Struct(u); err != nil {
+		return fmt.Errorf("validate unit: %w", err)
+	}
+
+	if u.DeletedAt.IsPresent() && u.DeletedAt.MustGet().IsZero() {
+		return fmt.Errorf("validate unit deleted at: value is zero")
+	}
+
+	if u.UserID.IsPresent() && u.UserID.MustGet() == uuid.Nil {
+		return fmt.Errorf("validate unit user id: value is zero")
+	}
+
+	return nil
 }
 
 // Touch increments the version and updates UpdatedAt.
