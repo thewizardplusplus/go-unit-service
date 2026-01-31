@@ -12,6 +12,8 @@ import (
 )
 
 var (
+	// ErrBadParams indicates invalid input parameters.
+	ErrBadParams = errors.New("bad params")
 	// ErrUserIDMismatch indicates the update user does not match the unit owner.
 	ErrUserIDMismatch = errors.New("unit user id does not match")
 	// ErrUserIDMissing indicates the unit has no user id set.
@@ -20,7 +22,7 @@ var (
 
 // Repository defines persistence operations for units.
 type Repository interface {
-	GetByID(ctx context.Context, id uuid.UUID) (unitEntity.Unit, error)
+	GetByIDs(ctx context.Context, ids []uuid.UUID) ([]unitEntity.Unit, error)
 	GetAll(ctx context.Context, substring mo.Option[string]) ([]unitEntity.Unit, error)
 	Create(ctx context.Context, unit unitEntity.Unit) error
 	Update(ctx context.Context, unit unitEntity.Unit) error
@@ -36,20 +38,24 @@ func NewUseCase(repo Repository) *UseCase {
 	return &UseCase{repo: repo}
 }
 
-// GetByID returns a unit by id.
-func (u *UseCase) GetByID(ctx context.Context, id uuid.UUID) (unitEntity.Unit, error) {
-	unit, err := u.repo.GetByID(ctx, id)
-	if err != nil {
-		return unitEntity.Unit{}, fmt.Errorf("get unit by id: %w", err)
+// GetByIDs returns units by ids.
+func (u *UseCase) GetByIDs(ctx context.Context, ids []uuid.UUID) ([]unitEntity.Unit, error) {
+	if len(ids) == 0 {
+		return nil, errors.Join(ErrBadParams, fmt.Errorf("ids must not be empty"))
 	}
 
-	return unit, nil
+	units, err := u.repo.GetByIDs(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("get units by ids: %w", err)
+	}
+
+	return units, nil
 }
 
 // GetAll returns all units, optionally filtered by name substring.
 func (u *UseCase) GetAll(ctx context.Context, substring mo.Option[string]) ([]unitEntity.Unit, error) {
 	if substring.IsPresent() && substring.MustGet() == "" {
-		return nil, fmt.Errorf("substring must not be empty when set")
+		return nil, errors.Join(ErrBadParams, fmt.Errorf("substring must not be empty when set"))
 	}
 
 	units, err := u.repo.GetAll(ctx, substring)
@@ -64,7 +70,7 @@ func (u *UseCase) GetAll(ctx context.Context, substring mo.Option[string]) ([]un
 func (u *UseCase) Create(ctx context.Context, userID mo.Option[uuid.UUID], name string) (unitEntity.Unit, error) {
 	unit := unitEntity.New(userID, name)
 	if err := unit.Validate(); err != nil {
-		return unitEntity.Unit{}, fmt.Errorf("validate unit create: %w", err)
+		return unitEntity.Unit{}, errors.Join(ErrBadParams, fmt.Errorf("validate unit create: %w", err))
 	}
 
 	if err := u.repo.Create(ctx, unit); err != nil {
@@ -76,11 +82,16 @@ func (u *UseCase) Create(ctx context.Context, userID mo.Option[uuid.UUID], name 
 
 // Update updates a unit by id and user id.
 func (u *UseCase) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, name string) (unitEntity.Unit, error) {
-	unit, err := u.repo.GetByID(ctx, id)
+	units, err := u.repo.GetByIDs(ctx, []uuid.UUID{id})
 	if err != nil {
 		return unitEntity.Unit{}, fmt.Errorf("get unit by id for update: %w", err)
 	}
 
+	if len(units) != 1 {
+		return unitEntity.Unit{}, fmt.Errorf("get unit by id for update: expected 1 unit, got %d", len(units))
+	}
+
+	unit := units[0]
 	if !unit.UserID.IsPresent() {
 		return unitEntity.Unit{}, ErrUserIDMissing
 	}
@@ -93,7 +104,7 @@ func (u *UseCase) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, na
 	unit.Name = name
 
 	if err := unit.Validate(); err != nil {
-		return unitEntity.Unit{}, fmt.Errorf("validate unit update: %w", err)
+		return unitEntity.Unit{}, errors.Join(ErrBadParams, fmt.Errorf("validate unit update: %w", err))
 	}
 
 	if err := u.repo.Update(ctx, unit); err != nil {
@@ -105,11 +116,16 @@ func (u *UseCase) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, na
 
 // Delete marks the unit as deleted and saves it.
 func (u *UseCase) Delete(ctx context.Context, id uuid.UUID) (unitEntity.Unit, error) {
-	unit, err := u.repo.GetByID(ctx, id)
+	units, err := u.repo.GetByIDs(ctx, []uuid.UUID{id})
 	if err != nil {
 		return unitEntity.Unit{}, fmt.Errorf("get unit by id for delete: %w", err)
 	}
 
+	if len(units) != 1 {
+		return unitEntity.Unit{}, fmt.Errorf("get unit by id for delete: expected 1 unit, got %d", len(units))
+	}
+
+	unit := units[0]
 	unit.MarkDeleted()
 
 	if err := u.repo.Update(ctx, unit); err != nil {
