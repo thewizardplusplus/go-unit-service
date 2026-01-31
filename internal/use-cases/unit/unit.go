@@ -1,10 +1,9 @@
-package unit
+package unitUseCase
 
 import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
 	unitEntity "go-unit-service/internal/entities/unit"
 
@@ -12,80 +11,74 @@ import (
 	"github.com/samber/mo"
 )
 
+var (
+	// ErrUserIDMismatch indicates the update user does not match the unit owner.
+	ErrUserIDMismatch = errors.New("unit user id does not match")
+	// ErrUserIDMissing indicates the unit has no user id set.
+	ErrUserIDMissing = errors.New("unit user id is missing")
+)
+
 // Repository defines persistence operations for units.
 type Repository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (unitEntity.Unit, error)
-	GetAll(ctx context.Context) ([]unitEntity.Unit, error)
+	GetAll(ctx context.Context, substring mo.Option[string]) ([]unitEntity.Unit, error)
 	Create(ctx context.Context, unit unitEntity.Unit) error
 	Update(ctx context.Context, unit unitEntity.Unit) error
 }
 
-// Service provides business logic for units.
-type Service struct {
+// UseCase provides business logic for units.
+type UseCase struct {
 	repo Repository
 }
 
-// NewService builds a Service.
-func NewService(repo Repository) *Service {
-	return &Service{repo: repo}
+// NewUseCase builds a UseCase.
+func NewUseCase(repo Repository) *UseCase {
+	return &UseCase{repo: repo}
 }
-
-// ErrUserIDMismatch indicates the update user does not match the unit owner.
-var ErrUserIDMismatch = errors.New("unit user id does not match")
-
-// ErrUserIDMissing indicates the unit has no user id set.
-var ErrUserIDMissing = errors.New("unit user id is missing")
 
 // GetByID returns a unit by id.
-func (s *Service) GetByID(ctx context.Context, id uuid.UUID) (unitEntity.Unit, error) {
-	return s.repo.GetByID(ctx, id)
-}
-
-// GetAll returns all units without pagination.
-func (s *Service) GetAll(ctx context.Context) ([]unitEntity.Unit, error) {
-	return s.repo.GetAll(ctx)
-}
-
-// GetAllFiltered returns all units filtered by name substring.
-func (s *Service) GetAllFiltered(ctx context.Context, substring string) ([]unitEntity.Unit, error) {
-	units, err := s.repo.GetAll(ctx)
+func (u *UseCase) GetByID(ctx context.Context, id uuid.UUID) (unitEntity.Unit, error) {
+	unit, err := u.repo.GetByID(ctx, id)
 	if err != nil {
-		return nil, err
+		return unitEntity.Unit{}, fmt.Errorf("get unit by id: %w", err)
 	}
 
-	if substring == "" {
-		return units, nil
+	return unit, nil
+}
+
+// GetAll returns all units, optionally filtered by name substring.
+func (u *UseCase) GetAll(ctx context.Context, substring mo.Option[string]) ([]unitEntity.Unit, error) {
+	if substring.IsPresent() && substring.MustGet() == "" {
+		return nil, fmt.Errorf("substring must not be empty when set")
 	}
 
-	filtered := make([]unitEntity.Unit, 0, len(units))
-	for _, unit := range units {
-		if strings.Contains(unit.Name, substring) {
-			filtered = append(filtered, unit)
-		}
+	units, err := u.repo.GetAll(ctx, substring)
+	if err != nil {
+		return nil, fmt.Errorf("get all units: %w", err)
 	}
 
-	return filtered, nil
+	return units, nil
 }
 
 // Create creates a new unit.
-func (s *Service) Create(ctx context.Context, userID mo.Option[uuid.UUID], name string) (unitEntity.Unit, error) {
+func (u *UseCase) Create(ctx context.Context, userID mo.Option[uuid.UUID], name string) (unitEntity.Unit, error) {
 	unit := unitEntity.New(userID, name)
 	if err := unit.Validate(); err != nil {
-		return unitEntity.Unit{}, err
+		return unitEntity.Unit{}, fmt.Errorf("validate unit create: %w", err)
 	}
 
-	if err := s.repo.Create(ctx, unit); err != nil {
-		return unitEntity.Unit{}, err
+	if err := u.repo.Create(ctx, unit); err != nil {
+		return unitEntity.Unit{}, fmt.Errorf("create unit: %w", err)
 	}
 
 	return unit, nil
 }
 
 // Update updates a unit by id and user id.
-func (s *Service) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, name string) (unitEntity.Unit, error) {
-	unit, err := s.repo.GetByID(ctx, id)
+func (u *UseCase) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, name string) (unitEntity.Unit, error) {
+	unit, err := u.repo.GetByID(ctx, id)
 	if err != nil {
-		return unitEntity.Unit{}, err
+		return unitEntity.Unit{}, fmt.Errorf("get unit by id for update: %w", err)
 	}
 
 	if !unit.UserID.IsPresent() {
@@ -103,24 +96,24 @@ func (s *Service) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, na
 		return unitEntity.Unit{}, fmt.Errorf("validate unit update: %w", err)
 	}
 
-	if err := s.repo.Update(ctx, unit); err != nil {
-		return unitEntity.Unit{}, err
+	if err := u.repo.Update(ctx, unit); err != nil {
+		return unitEntity.Unit{}, fmt.Errorf("update unit: %w", err)
 	}
 
 	return unit, nil
 }
 
 // Delete marks the unit as deleted and saves it.
-func (s *Service) Delete(ctx context.Context, id uuid.UUID) (unitEntity.Unit, error) {
-	unit, err := s.repo.GetByID(ctx, id)
+func (u *UseCase) Delete(ctx context.Context, id uuid.UUID) (unitEntity.Unit, error) {
+	unit, err := u.repo.GetByID(ctx, id)
 	if err != nil {
-		return unitEntity.Unit{}, err
+		return unitEntity.Unit{}, fmt.Errorf("get unit by id for delete: %w", err)
 	}
 
 	unit.MarkDeleted()
 
-	if err := s.repo.Update(ctx, unit); err != nil {
-		return unitEntity.Unit{}, err
+	if err := u.repo.Update(ctx, unit); err != nil {
+		return unitEntity.Unit{}, fmt.Errorf("update unit for delete: %w", err)
 	}
 
 	return unit, nil
