@@ -22,7 +22,6 @@ var (
 
 // Repository defines persistence operations for units.
 type Repository interface {
-	GetByID(ctx context.Context, id uuid.UUID) (unitEntity.Unit, error)
 	GetByIDs(ctx context.Context, ids []uuid.UUID) ([]unitEntity.Unit, error)
 	GetAll(ctx context.Context, userID uuid.UUID, substring mo.Option[string]) ([]unitEntity.Unit, error)
 	Create(ctx context.Context, unit unitEntity.Unit) error
@@ -83,11 +82,16 @@ func (u *UseCase) Create(ctx context.Context, userID uuid.UUID, name string) (un
 
 // Update updates a unit by id and user id.
 func (u *UseCase) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, name string) (unitEntity.Unit, error) {
-	unit, err := u.repo.GetByID(ctx, id)
+	units, err := u.repo.GetByIDs(ctx, []uuid.UUID{id})
 	if err != nil {
 		return unitEntity.Unit{}, fmt.Errorf("get unit by id for update: %w", err)
 	}
 
+	if len(units) != 1 {
+		return unitEntity.Unit{}, fmt.Errorf("get unit by id for update: expected 1 unit, got %d", len(units))
+	}
+
+	unit := units[0]
 	if !unit.UserID.IsPresent() {
 		return unitEntity.Unit{}, ErrUserIDMissing
 	}
@@ -112,11 +116,16 @@ func (u *UseCase) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, na
 
 // Delete marks the unit as deleted and saves it.
 func (u *UseCase) Delete(ctx context.Context, id uuid.UUID) (unitEntity.Unit, error) {
-	unit, err := u.repo.GetByID(ctx, id)
+	units, err := u.repo.GetByIDs(ctx, []uuid.UUID{id})
 	if err != nil {
 		return unitEntity.Unit{}, fmt.Errorf("get unit by id for delete: %w", err)
 	}
 
+	if len(units) != 1 {
+		return unitEntity.Unit{}, fmt.Errorf("get unit by id for delete: expected 1 unit, got %d", len(units))
+	}
+
+	unit := units[0]
 	unit.MarkDeleted()
 
 	if err := u.repo.Update(ctx, unit); err != nil {
