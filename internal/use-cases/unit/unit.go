@@ -86,7 +86,6 @@ func (u *UseCase) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, na
 	if err != nil {
 		return unitEntity.Unit{}, fmt.Errorf("get unit by id for update: %w", err)
 	}
-
 	if len(units) != 1 {
 		return unitEntity.Unit{}, fmt.Errorf("get unit by id for update: expected 1 unit, got %d", len(units))
 	}
@@ -95,7 +94,6 @@ func (u *UseCase) Update(ctx context.Context, id uuid.UUID, userID uuid.UUID, na
 	if !unit.UserID.IsPresent() {
 		return unitEntity.Unit{}, ErrUserIDMissing
 	}
-
 	if unit.UserID.MustGet() != userID {
 		return unitEntity.Unit{}, ErrUserIDMismatch
 	}
@@ -120,7 +118,6 @@ func (u *UseCase) Delete(ctx context.Context, id uuid.UUID) (unitEntity.Unit, er
 	if err != nil {
 		return unitEntity.Unit{}, fmt.Errorf("get unit by id for delete: %w", err)
 	}
-
 	if len(units) != 1 {
 		return unitEntity.Unit{}, fmt.Errorf("get unit by id for delete: expected 1 unit, got %d", len(units))
 	}
